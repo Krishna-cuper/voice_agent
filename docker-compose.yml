@@ -41,7 +41,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:Welcome@123@db:5432/postgres
       WHISPER_URL: http://whisper:9000
-      OLLAMA_URL: http://host.docker.internal:11434
+      GROQ_API_KEY: ${GROQ_API_KEY}
     ports:
       - "8000:8000"
     depends_on:

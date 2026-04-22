@@ -1,45 +1,41 @@
 from openai import OpenAI
 import os
+import httpx
 from fastapi import UploadFile
 from dotenv import load_dotenv
-import torch
-from transformers import pipeline
-import librosa
-import numpy as np
 
 load_dotenv()
 
+# ── Groq API (drop-in replacement for Ollama) ────────────────────────────────
+# Free tier: 800K tokens/day — https://console.groq.com/keys
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "llama3-8b-8192"  # Fast, free, open-source model on Groq
+
+# ── Whisper ASR — Docker service URL ─────────────────────────────────────────
+WHISPER_URL = os.environ.get("WHISPER_URL", "http://localhost:9000")
+
+
 class AIService:
-    _whisper_pipeline = None
 
     def __init__(self):
-        self.api_key = os.environ.get("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.groq_client = OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL
+        ) if GROQ_API_KEY else None
 
-    @classmethod
-    def get_whisper_pipeline(cls):
-        if cls._whisper_pipeline is None:
-            print("Loading local Whisper model (openai/whisper-base)...")
-            cls._whisper_pipeline = pipeline(
-                "automatic-speech-recognition",
-                model="openai/whisper-base",
-                device="cuda" if torch.cuda.is_available() else "cpu",
-            )
-        return cls._whisper_pipeline
-
+    # ── Transcription (Whisper Docker) ───────────────────────────────────────
     async def transcribe_audio(self, file: UploadFile):
         temp_path = f"temp_{file.filename}"
         with open(temp_path, "wb") as buffer:
             buffer.write(await file.read())
-        
+
         try:
-            # Call the local Docker ASR service
-            print("Calling local Docker ASR service at localhost:9000...")
-            import httpx
+            print(f"Calling Whisper ASR at {WHISPER_URL}...")
             async with httpx.AsyncClient(timeout=60.0) as client:
                 with open(temp_path, "rb") as audio_file:
                     response = await client.post(
-                        "http://localhost:9000/asr",
+                        f"{WHISPER_URL}/asr",
                         files={"audio_file": audio_file},
                         params={"task": "transcribe", "language": "en", "output": "json"}
                     )
@@ -48,126 +44,78 @@ class AIService:
                     else:
                         return f"[ASR Error: {response.text}]"
         except Exception as e:
-            print(f"ASR Service Connection Error: {e}")
-            # Fallback to local transformers if docker fails
-            try:
-                import librosa
-                audio, sr = librosa.load(temp_path, sr=16000)
-                pipe = self.get_whisper_pipeline()
-                result = pipe(audio)
-                return result["text"]
-            except:
-                return f"[Transcription Failed: {e}]"
+            print(f"ASR Service Error: {e}")
+            return f"[Transcription Failed: {e}]"
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def _build_system_prompt(self, context: str, difficulty: str) -> str:
+        return f"""You are a professional CALL CENTER AGENT in a training simulation.
+Scenario: {context}
+Difficulty: {difficulty}
+Instructions:
+- Stay in character as the professional agent at all times.
+- Your goal is to help the customer (the user) resolve their issue.
+- Match tone based on difficulty (Advanced = more assertive customer).
+- Keep responses professional and concise (1–2 sentences max).
+- Respond ONLY in English. Do not use any other language.
+Only output the agent's reply."""
+
+    def _build_messages(self, system_prompt: str, history: list, message: str) -> list:
+        msgs = [{"role": "system", "content": system_prompt}]
+        if history:
+            for h in history:
+                role = "user" if h["role"] == "customer" else "assistant"
+                msgs.append({"role": role, "content": h["text"]})
+        if not history or history[-1]["text"] != message:
+            msgs.append({"role": "user", "content": message})
+        return msgs
+
+    # ── Non-streaming AI Response (Groq) ─────────────────────────────────────
     async def get_ai_response(self, context: str, message: str, difficulty: str, history: list = None):
         try:
-            import httpx
-            print("Calling local Ollama (phi3) for AI Agent response...")
-            
-            system_prompt = f"""
-                You are a professional CALL CENTER AGENT in a training simulation.
-                Scenario:
-                {context}
-                
-                Difficulty: {difficulty}
-                Instructions:
-                - Stay in character as the professional agent at all times.
-                - Your goal is to help the customer (the user) resolve their issue.
-                - Match tone based on difficulty.
-                - Keep responses professional and concise (1–2 sentences max).
-                - Respond ONLY in English. Do not use any other language.
-                Only output the agent's reply.
-            """
-            
-            # Build messages from history
-            ollama_messages = [{"role": "system", "content": system_prompt}]
-            if history:
-                for h in history:
-                    role = "user" if h["role"] == "customer" else "assistant"
-                    ollama_messages.append({"role": role, "content": h["text"]})
-            
-            # Add latest message if not in history
-            if not history or history[-1]["text"] != message:
-                ollama_messages.append({"role": "user", "content": message})
-            
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    "http://localhost:11434/api/chat",
-                    json={
-                        "model": "phi3:mini",
-                        "messages": ollama_messages,
-                        "stream": False,
-                        "options": {
-                            "num_gpu": 0
-                        }
-                    }
-                )
-                if response.status_code == 200:
-                    return response.json()["message"]["content"].strip()
-                else:
-                    print(f"Ollama Response Error ({response.status_code}): {response.text}")
+            print(f"Calling Groq API ({GROQ_MODEL}) for agent response...")
+            system_prompt = self._build_system_prompt(context, difficulty)
+            messages = self._build_messages(system_prompt, history, message)
+
+            response = self.groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                max_tokens=256,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
         except Exception as e:
-            print(f"Ollama AI Error: {e}")
+            print(f"Groq AI Error: {e}")
             return "I'm having trouble thinking of a response right now."
-                    
+
+    # ── Streaming AI Response (Groq) ──────────────────────────────────────────
     async def get_ai_response_stream(self, context: str, message: str, difficulty: str, history: list = None):
         try:
-            import httpx
-            import json
-            
-            system_prompt = f"""
-                You are a professional CALL CENTER AGENT in a training simulation.
-                Scenario: {context}
-                Difficulty: {difficulty}
-                Instructions:
-                - Stay in character as the professional agent at all times.
-                - Your goal is to help the customer (the user) resolve their issue.
-                - Match tone based on difficulty.
-                - Keep responses professional (1–2 sentences max).
-                - Respond ONLY in English. Do not use any other language.
-                Only output the agent's reply.
-            """
-            
-            ollama_messages = [{"role": "system", "content": system_prompt}]
-            if history:
-                for h in history:
-                    role = "user" if h["role"] == "customer" else "assistant"
-                    ollama_messages.append({"role": role, "content": h["text"]})
-            
-            if not history or history[-1]["text"] != message:
-                ollama_messages.append({"role": "user", "content": message})
-            
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    "POST",
-                    "http://localhost:11434/api/chat",
-                    json={
-                        "model": "phi3:mini",
-                        "messages": ollama_messages,
-                        "stream": True,
-                        "options": {"num_gpu": 0}
-                    }
-                ) as response:
-                    if response.status_code == 200:
-                        async for line in response.aiter_lines():
-                            if line:
-                                data = json.loads(line)
-                                if "message" in data and "content" in data["message"]:
-                                    yield data["message"]["content"]
-                    else:
-                        yield f"I'm sorry, I'm having trouble responding right now. (Error {response.status_code})"
+            print(f"Calling Groq API ({GROQ_MODEL}) streaming...")
+            system_prompt = self._build_system_prompt(context, difficulty)
+            messages = self._build_messages(system_prompt, history, message)
+
+            stream = self.groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                max_tokens=256,
+                temperature=0.7,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
         except Exception as e:
-            print(f"Ollama Streaming Exception: {e}")
+            print(f"Groq Streaming Exception: {e}")
             yield "I understand, but I'm still processing that..."
 
+    # ── Session Scoring (Groq) ────────────────────────────────────────────────
     async def score_interaction(self, history: list):
         try:
-            import httpx
-            print("Calling local Ollama (phi3) for session scoring...")
-            
+            print(f"Calling Groq API ({GROQ_MODEL}) for session scoring...")
             prompt = (
                 "You are an expert call center supervisor evaluating a trainee. Score this agent interaction from 0-100.\n\n"
                 "CRITICAL SCORING CRITERIA (Weight 25% each):\n"
@@ -177,33 +125,19 @@ class AIService:
                 "4. Professionalism & Clarity: Was their communication crisp and efficient?\n\n"
                 f"History: {str(history)}\n\n"
                 "Provide exactly 2-3 sentences of feedback. Highlight exactly ONE strength and exactly ONE area to improve.\n"
-                "IMPORTANT: Your response MUST be ONLY valid JSON: {'score': int, 'feedback': 'string'}"
+                "IMPORTANT: Your response MUST be ONLY valid JSON: {\"score\": int, \"feedback\": \"string\"}"
             )
-            
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    "http://localhost:11434/api/chat",
-                    json={
-                        "model": "phi3:mini",
-                        "messages": [
-                            {"role": "user", "content": prompt}
-                        ],
-                        "stream": False,
-                        "options": {
-                            "num_gpu": 0
-                        }
-                    }
-                )
-                if response.status_code == 200:
-                    content = response.json()["message"]["content"]
-                    import json, re
-                    match = re.search(r'\{.*\}', content, re.DOTALL)
-                    if match:
-                        return json.loads(match.group(0))
-                    return json.loads(content)
-                else:
-                    print(f"Scoring Ollama Error ({response.status_code}): {response.text}")
+
+            response = self.groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=256,
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            )
+            import json
+            return json.loads(response.choices[0].message.content)
         except Exception as e:
             print(f"Scoring Exception: {e}")
-        
+
         return {"score": 85, "feedback": "Good effort. Try to be more specific with your resolution."}

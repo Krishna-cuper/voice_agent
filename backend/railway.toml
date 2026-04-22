@@ -1,10 +1,9 @@
-# Railway Deployment Configuration
-# Docs: https://docs.railway.app/reference/config-as-code
+# Railway configuration for the FastAPI backend
+# Place this at: backend/railway.toml
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "backend/Dockerfile"
-buildCommand = ""
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"

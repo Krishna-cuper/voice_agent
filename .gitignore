@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/__pycache__/
+venv/
+
+# Build outputs
+dist/
+build/
+
+# Environment variables
+.env
+backend/.env
+
+# Local databases
+*.db
+*.sqlite
+myapp_db/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

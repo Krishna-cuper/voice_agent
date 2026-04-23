@@ -3,7 +3,7 @@ uvicorn
 sqlmodel
 pydantic-settings
 python-multipart
-openai-whisper
+faster-whisper
 openai
 python-dotenv
 psycopg2-binary

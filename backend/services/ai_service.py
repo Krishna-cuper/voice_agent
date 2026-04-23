@@ -2,30 +2,23 @@ from openai import OpenAI
 import os
 from fastapi import UploadFile
 from dotenv import load_dotenv
-import torch
-from transformers import pipeline
-import librosa
-import numpy as np
 
 load_dotenv()
 
 class AIService:
-    _whisper_pipeline = None
+    _whisper_model = None
 
     def __init__(self):
         self.api_key = os.environ.get("OPENAI_API_KEY")
         self.client = OpenAI(api_key=self.api_key) if self.api_key else None
 
     @classmethod
-    def get_whisper_pipeline(cls):
-        if cls._whisper_pipeline is None:
-            print("Loading local Whisper model (openai/whisper-base)...")
-            cls._whisper_pipeline = pipeline(
-                "automatic-speech-recognition",
-                model="openai/whisper-base",
-                device="cuda" if torch.cuda.is_available() else "cpu",
-            )
-        return cls._whisper_pipeline
+    def get_whisper_model(cls):
+        if cls._whisper_model is None:
+            from faster_whisper import WhisperModel
+            print("Loading local Whisper model (faster-whisper base)...")
+            cls._whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+        return cls._whisper_model
 
     async def transcribe_audio(self, file: UploadFile):
         temp_path = f"temp_{file.filename}"
@@ -49,15 +42,13 @@ class AIService:
                         return f"[ASR Error: {response.text}]"
         except Exception as e:
             print(f"ASR Service Connection Error: {e}")
-            # Fallback to local transformers if docker fails
+            # Fallback to faster-whisper if docker ASR service is unavailable
             try:
-                import librosa
-                audio, sr = librosa.load(temp_path, sr=16000)
-                pipe = self.get_whisper_pipeline()
-                result = pipe(audio)
-                return result["text"]
-            except:
-                return f"[Transcription Failed: {e}]"
+                model = self.get_whisper_model()
+                segments, _ = model.transcribe(temp_path, language="en")
+                return "".join(segment.text for segment in segments).strip()
+            except Exception as fallback_err:
+                return f"[Transcription Failed: {fallback_err}]"
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)

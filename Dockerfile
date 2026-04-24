@@ -40,5 +40,5 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 # Expose the port Railway expects
 EXPOSE 8000
 
-# Start Uvicorn
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start Uvicorn using shell form to read $PORT (Railway injects this)
+CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}

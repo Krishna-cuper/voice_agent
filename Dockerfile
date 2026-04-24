@@ -5,7 +5,6 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy frontend source code
 COPY frontend/package*.json ./
 RUN npm install
 
@@ -13,32 +12,35 @@ COPY frontend/ .
 RUN npm run build
 
 # ==========================================
-# Stage 2: Build the FastAPI Backend
+# Stage 2: Backend + Whisper
 # ==========================================
 FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# System deps
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libpq-dev \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-# We use the root requirements.txt which points to the dependencies
+# Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt psycopg2-binary httpx
+RUN pip install --no-cache-dir -r requirements.txt \
+    psycopg2-binary \
+    httpx \
+    faster-whisper \
+    openai-whisper-asr-webservice
 
-# Copy the backend source code
+# Backend code
 COPY backend/ ./backend/
 
-# Copy the built React app from Stage 1 into the Python container
+# Frontend build
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Expose the port Railway expects
+# Expose port
 EXPOSE 8000
 
-# Start Uvicorn using shell form to read $PORT (Railway injects this)
-CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run BOTH Whisper + FastAPI
+CMD sh -c "python3 -m whisper_asr.webservice --host 0.0.0.0 --port 9000 & uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"

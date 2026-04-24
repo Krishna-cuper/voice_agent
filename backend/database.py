@@ -5,7 +5,7 @@ from sqlalchemy import text
 import json
 
 # ✅ FIX: encode @ → %40
-postgres_url = "postgresql://postgres:Welcome%40123@localhost:5432/postgres"
+postgres_url = "postgresql://postgres:PYbljanDLJaYkguuckqdKsROemRviBYH@shortline.proxy.rlwy.net:18889/postgres"
 
 engine = create_engine(postgres_url, echo=True)
 

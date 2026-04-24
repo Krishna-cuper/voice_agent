@@ -8,4 +8,4 @@ python-dotenv
 psycopg2-binary
 httpx
 faster-whisper
-openai-whisper-asr-webservice
+

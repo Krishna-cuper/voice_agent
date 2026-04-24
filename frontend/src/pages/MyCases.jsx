@@ -18,7 +18,7 @@ function MyCases() {
     });
 
     useEffect(() => {
-        fetch('http://localhost:8000/cases')
+        fetch('/api/cases')
             .then(res => res.json())
             .then(data => setCases(data));
     }, []);
@@ -38,7 +38,7 @@ function MyCases() {
             alert("Please fill in Title and Scenario");
             return;
         }
-        fetch('http://localhost:8000/cases', {
+        fetch('/api/cases', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newCase)

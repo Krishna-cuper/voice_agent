@@ -1,9 +1,10 @@
 # nixpacks.toml at repo ROOT — tells Railway to build the backend
 [phases.setup]
-nixPkgs = ["python310", "ffmpeg"]
+nixPkgs = ["python310", "ffmpeg", "nodejs"]
 
 [phases.install]
 cmds = [
+  "cd frontend && npm install && npm run build",
   "pip install -r requirements.txt"
 ]
 

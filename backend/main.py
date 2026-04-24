@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from .database import engine, init_db
@@ -21,12 +22,12 @@ app.add_middleware(
 def on_startup():
     init_db()
 
-@app.get("/cases")
+@app.get("/api/cases")
 def get_cases():
     with Session(engine) as session:
         return session.exec(select(Case)).all()
 
-@app.post("/cases")
+@app.post("/api/cases")
 def create_case(case: Case):
     with Session(engine) as session:
         session.add(case)
@@ -36,7 +37,7 @@ def create_case(case: Case):
 
 
 
-@app.post("/transcribe")
+@app.post("/api/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     # AI service handles transcription
     ai_service = AIService()
@@ -46,7 +47,7 @@ async def transcribe(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/start-session")
+@app.post("/api/start-session")
 async def start_session(data: dict):
     case_id = data.get("case_id")
     opening_message = data.get("opening_message", "")
@@ -68,7 +69,7 @@ async def start_session(data: dict):
             
         return {"session_id": record.id}
 
-@app.post("/respond-stream")
+@app.post("/api/respond-stream")
 async def respond_stream(data: dict):
     context = data.get("context", "")
     message = data.get("message", "")
@@ -100,14 +101,14 @@ async def respond_stream(data: dict):
 
     return StreamingResponse(generate(), media_type="text/plain")
 
-@app.post("/score")
+@app.post("/api/score")
 async def get_score(data: dict):
     history = data.get("history", [])
     ai_service = AIService()
     score_data = await ai_service.score_interaction(history)
     return score_data
 
-@app.post("/record")
+@app.post("/api/record")
 async def record_session(record_data: dict):
     session_id = record_data.get("session_id")
     with Session(engine) as session:
@@ -145,7 +146,7 @@ async def record_session(record_data: dict):
         session.commit()
         return {"status": "success", "id": new_record.id}
 
-@app.get("/stats")
+@app.get("/api/stats")
 async def get_stats():
     with Session(engine) as session:
         stats = session.exec(select(UserStats)).first()
@@ -153,7 +154,7 @@ async def get_stats():
             stats = UserStats(id=1, streak=1, total_sessions=0, average_score=0.0)
         return stats
 
-@app.get("/history")
+@app.get("/api/history")
 async def get_history():
     with Session(engine) as session:
         # Join Case to get title and topic
@@ -174,6 +175,25 @@ async def get_history():
             history.append(item)
             
         return history
+
+# ── Serve React Frontend ──────────────────────────────────────────────────
+dist_assets_path = os.path.join("frontend", "dist", "assets")
+if os.path.isdir(dist_assets_path):
+    app.mount("/assets", StaticFiles(directory=dist_assets_path), name="assets")
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    dist_path = os.path.join("frontend", "dist")
+    file_path = os.path.join(dist_path, full_path)
+    
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+        
+    index_path = os.path.join(dist_path, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+        
+    return {"message": "Frontend not built. Please run 'npm run build' inside the frontend directory."}
 
 if __name__ == "__main__":
     import uvicorn

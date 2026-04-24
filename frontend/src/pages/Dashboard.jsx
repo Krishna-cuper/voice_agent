@@ -10,8 +10,8 @@ function Dashboard() {
 
     useEffect(() => {
         Promise.all([
-            fetch('http://localhost:8000/stats').then(res => res.json()),
-            fetch('http://localhost:8000/history').then(res => res.json())
+            fetch('/api/stats').then(res => res.json()),
+            fetch('/api/history').then(res => res.json())
         ]).then(([statsData, historyData]) => {
             setStats(statsData);
             setHistory(historyData);

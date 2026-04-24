@@ -22,7 +22,7 @@ function DailyTraining() {
     const MAX_TURNS = 5;
 
     useEffect(() => {
-        fetch('http://localhost:8000/stats')
+        fetch('/api/stats')
             .then(res => res.json())
             .then(data => setStats(data));
     }, []);
@@ -31,7 +31,7 @@ function DailyTraining() {
     const audioChunksRef = useRef([]);
 
     useEffect(() => {
-        fetch('http://localhost:8000/cases')
+        fetch('/api/cases')
             .then(res => res.json())
             .then(data => {
                 // DAILY SELECTION LOGIC: Seed random based on date
@@ -76,7 +76,7 @@ function DailyTraining() {
             // ... start session ...
             // Start session in DB
             try {
-                const res = await fetch('http://localhost:8000/start-session', {
+                const res = await fetch('/api/start-session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -97,7 +97,7 @@ function DailyTraining() {
         setTurnCount(0);
         // Start new session in DB
         try {
-            const res = await fetch('http://localhost:8000/start-session', {
+            const res = await fetch('/api/start-session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -124,7 +124,7 @@ function DailyTraining() {
         setStreamingText('');
 
         try {
-            const response = await fetch('http://localhost:8000/respond-stream', {
+            const response = await fetch('/api/respond-stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -185,7 +185,7 @@ function DailyTraining() {
 
                 setIsTranscribing(true);
                 try {
-                    const response = await fetch('http://localhost:8000/transcribe', {
+                    const response = await fetch('/api/transcribe', {
                         method: 'POST',
                         body: formData,
                     });
@@ -218,7 +218,7 @@ function DailyTraining() {
     const finishScenario = async (history) => {
         setIsScoring(true);
         try {
-            const response = await fetch('http://localhost:8000/score', {
+            const response = await fetch('/api/score', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ history: history })
@@ -232,7 +232,7 @@ function DailyTraining() {
             };
 
             // Save to DB
-            await fetch('http://localhost:8000/record', {
+            await fetch('/api/record', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

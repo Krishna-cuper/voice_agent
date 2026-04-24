@@ -1,1 +1,9 @@
--r backend/requirements.txt
+fastapi
+uvicorn
+sqlmodel
+pydantic-settings
+python-multipart
+openai
+python-dotenv
+psycopg2-binary
+httpx

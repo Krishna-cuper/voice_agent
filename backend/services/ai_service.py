@@ -10,8 +10,7 @@ load_dotenv()
 # Free tier: 800K tokens/day — https://console.groq.com/keys
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_MODEL = "llama3-8b-8192"  # Fast, free, open-source model on Groq
-
+GROQ_MODEL = "llama-3.1-8b-instant"
 # ── Whisper ASR — Docker service URL ─────────────────────────────────────────
 WHISPER_URL = os.environ.get("WHISPER_URL", "http://localhost:9000")
 
@@ -24,25 +23,23 @@ class AIService:
             base_url=GROQ_BASE_URL
         ) if GROQ_API_KEY else None
 
-    # ── Transcription (Whisper Docker) ───────────────────────────────────────
+    # ── Transcription (Groq Whisper API) ───────────────────────────────────────
     async def transcribe_audio(self, file: UploadFile):
+        if not self.groq_client:
+            return "[Transcription Failed: GROQ_API_KEY is missing]"
+            
         temp_path = f"temp_{file.filename}"
         with open(temp_path, "wb") as buffer:
             buffer.write(await file.read())
 
         try:
-            print(f"Calling Whisper ASR at {WHISPER_URL}...")
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                with open(temp_path, "rb") as audio_file:
-                    response = await client.post(
-                        f"{WHISPER_URL}/asr",
-                        files={"audio_file": audio_file},
-                        params={"task": "transcribe", "language": "en", "output": "json"}
-                    )
-                    if response.status_code == 200:
-                        return response.json().get("text", "")
-                    else:
-                        return f"[ASR Error: {response.text}]"
+            print("Calling Groq Whisper API for transcription...")
+            with open(temp_path, "rb") as audio_file:
+                transcription = self.groq_client.audio.transcriptions.create(
+                    file=(file.filename, audio_file.read()),
+                    model="whisper-large-v3"
+                )
+                return transcription.text
         except Exception as e:
             print(f"ASR Service Error: {e}")
             return f"[Transcription Failed: {e}]"
@@ -74,6 +71,9 @@ Only output the agent's reply."""
 
     # ── Non-streaming AI Response (Groq) ─────────────────────────────────────
     async def get_ai_response(self, context: str, message: str, difficulty: str, history: list = None):
+        if not self.groq_client:
+            return "Error: GROQ_API_KEY is missing."
+            
         try:
             print(f"Calling Groq API ({GROQ_MODEL}) for agent response...")
             system_prompt = self._build_system_prompt(context, difficulty)
@@ -92,6 +92,10 @@ Only output the agent's reply."""
 
     # ── Streaming AI Response (Groq) ──────────────────────────────────────────
     async def get_ai_response_stream(self, context: str, message: str, difficulty: str, history: list = None):
+        if not self.groq_client:
+            yield "Error: GROQ_API_KEY is missing. Please add it to your environment."
+            return
+            
         try:
             print(f"Calling Groq API ({GROQ_MODEL}) streaming...")
             system_prompt = self._build_system_prompt(context, difficulty)
@@ -114,6 +118,9 @@ Only output the agent's reply."""
 
     # ── Session Scoring (Groq) ────────────────────────────────────────────────
     async def score_interaction(self, history: list):
+        if not self.groq_client:
+            return {"score": 0, "feedback": "GROQ_API_KEY is missing. Cannot score session."}
+            
         try:
             print(f"Calling Groq API ({GROQ_MODEL}) for session scoring...")
             prompt = (

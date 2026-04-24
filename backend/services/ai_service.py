@@ -8,7 +8,7 @@ load_dotenv()
 
 # ── Groq API (drop-in replacement for Ollama) ────────────────────────────────
 # Free tier: 800K tokens/day — https://console.groq.com/keys
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_MODEL = "llama3-8b-8192"  # Fast, free, open-source model on Groq
 

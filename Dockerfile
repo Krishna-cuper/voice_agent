@@ -30,8 +30,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     psycopg2-binary \
     httpx \
-    faster-whisper \
-    openai-whisper-asr-webservice
+    faster-whisper
 
 # Backend code
 COPY backend/ ./backend/

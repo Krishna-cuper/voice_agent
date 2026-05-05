@@ -1,11 +1,16 @@
-# nixpacks.toml at repo ROOT — tells Railway to build the backend
+# nixpacks.toml at repo ROOT — tells Railway how to build the full-stack app
 [phases.setup]
-nixPkgs = ["python310", "ffmpeg", "nodejs"]
+nixPkgs = ["python310", "ffmpeg", "nodejs_20"]
 
 [phases.install]
 cmds = [
-  "cd frontend && npm install && npm run build",
-  "pip install -r requirements.txt"
+  "pip install -r requirements.txt",
+  "cd frontend && npm install"
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && npm run build"
 ]
 
 [start]

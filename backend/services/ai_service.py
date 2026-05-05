@@ -8,7 +8,7 @@ load_dotenv()
 
 # ── Groq API (drop-in replacement for Ollama) ────────────────────────────────
 # Free tier: 800K tokens/day — https://console.groq.com/keys
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_MODEL = "llama-3.1-8b-instant"
 # ── Whisper ASR — Docker service URL ─────────────────────────────────────────
